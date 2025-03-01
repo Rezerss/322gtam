@@ -1,84 +1,44 @@
-import sys
-import asyncio
-import websockets
-import json
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton
+import requests
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.label import Label
+from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+from kivy.uix.scrollview import ScrollView
 
-class ChatClient(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.initUI()
-        self.websocket = None
-        self.username = "Guest"
+# Базовый URL сервера
+BASE_URL = "http://216.24.57.4:8000"
 
-    def initUI(self):
-        self.setWindowTitle("Chat App")
-        self.setGeometry(100, 100, 400, 500)
+class MessengerApp(App):
+    def build(self):
+        self.layout = BoxLayout(orientation='vertical')
+        self.chat_history = ScrollView(size_hint=(1, 0.8))
+        self.chat_label = Label(size_hint_y=None, markup=True)
+        self.chat_label.bind(width=lambda *x: self.chat_label.setter('text_size')(self.chat_label, (self.chat_label.width, None)))
+        self.chat_history.add_widget(self.chat_label)
 
-        self.layout = QVBoxLayout()
+        self.message_input = TextInput(size_hint=(1, 0.1), multiline=False)
+        self.send_button = Button(text="Отправить", size_hint=(1, 0.1))
+        self.send_button.bind(on_press=self.send_message)
 
-        self.chat_display = QTextEdit()
-        self.chat_display.setReadOnly(True)
-        self.layout.addWidget(self.chat_display)
+        self.layout.add_widget(self.chat_history)
+        self.layout.add_widget(self.message_input)
+        self.layout.add_widget(self.send_button)
+        return self.layout
 
-        self.message_input = QLineEdit()
-        self.layout.addWidget(self.message_input)
+    def send_message(self, instance):
+        message = self.message_input.text
+        if message:
+            # Отправка сообщения на сервер
+            requests.post(f"{BASE_URL}/send_message", json={"sender_id": 1, "receiver_id": 2, "message": message})
+            self.message_input.text = ""
+            self.update_chat()
 
-        self.send_button = QPushButton("Send")
-        self.send_button.clicked.connect(self.send_message)
-        self.layout.addWidget(self.send_button)
-
-        self.setLayout(self.layout)
-
-    async def connect_to_server(self):
-        try:
-            self.websocket = await websockets.connect("ws://216.24.57.4:8765")
-            asyncio.create_task(self.receive_messages())
-        except Exception as e:
-            self.chat_display.append(f"Connection error: {e}")
-
-    async def receive_messages(self):
-        try:
-            async for message in self.websocket:
-                self.chat_display.append(message)
-        except Exception as e:
-            self.chat_display.append(f"Error receiving message: {e}")
-
-    def send_message(self):
-        message = self.message_input.text()
-        if message and self.websocket:
-            asyncio.create_task(self.websocket.send(json.dumps({"user": self.username, "message": message})))
-            self.message_input.clear()
-
-async def start_client():
-    app = QApplication(sys.argv)
-    client = ChatClient()
-    client.show()
-    await client.connect_to_server()
-    sys.exit(app.exec_())
+    def update_chat(self):
+        # Получение сообщений с сервера
+        response = requests.get(f"{BASE_URL}/get_messages/2")
+        messages = response.json().get("messages", [])
+        self.chat_label.text = "\n".join([f"[b]User {msg[1]}:[/b] {msg[3]}" for msg in messages])
 
 if __name__ == "__main__":
-    asyncio.run(start_client())
-
-# Server-side WebSocket chat server
-connected_clients = set()
-
-async def handle_client(websocket, path):
-    connected_clients.add(websocket)
-    try:
-        async for message in websocket:
-            data = json.loads(message)
-            broadcast_message = f"{data['user']}: {data['message']}"
-            await asyncio.wait([client.send(broadcast_message) for client in connected_clients if client != websocket])
-    except websockets.exceptions.ConnectionClosed:
-        pass
-    finally:
-        connected_clients.remove(websocket)
-
-async def start_server():
-    server = await websockets.serve(handle_client, "0.0.0.0", 8765)
-    print("Server started on ws://0.0.0.0:8765")
-    await server.wait_closed()
-
-if __name__ == "__main__":
-    asyncio.run(start_server())
+    MessengerApp().run()
