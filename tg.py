@@ -32,7 +32,7 @@ class ChatClient(QWidget):
 
     async def connect_to_server(self):
         try:
-            self.websocket = await websockets.connect("ws://YOUR_SERVER_IP:8765")
+            self.websocket = await websockets.connect("ws://216.24.57.4:8765")
             asyncio.create_task(self.receive_messages())
         except Exception as e:
             self.chat_display.append(f"Connection error: {e}")
