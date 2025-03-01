@@ -1,9 +1,7 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import sqlite3
-from datetime import datetime
 from cryptography.fernet import Fernet
-import base64
 
 # Генерация ключа для шифрования
 key = Fernet.generate_key()
@@ -20,8 +18,7 @@ cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    avatar TEXT
+    password TEXT NOT NULL
 )
 ''')
 
@@ -48,9 +45,6 @@ class MessageSend(BaseModel):
     receiver_id: int
     message: str
 
-class UserAvatar(BaseModel):
-    avatar: str  # Base64-строка
-
 # Регистрация пользователя
 @app.post("/register")
 def register(user: UserCreate):
@@ -58,25 +52,7 @@ def register(user: UserCreate):
     conn.commit()
     return {"message": "User registered successfully"}
 
-# Загрузка аватарки
-@app.post("/upload_avatar/{user_id}")
-async def upload_avatar(user_id: int, file: UploadFile = File(...)):
-    file_content = await file.read()
-    avatar_base64 = base64.b64encode(file_content).decode('utf-8')
-    cursor.execute("UPDATE users SET avatar = ? WHERE id = ?", (avatar_base64, user_id))
-    conn.commit()
-    return {"message": "Avatar uploaded successfully"}
-
-# Получение аватарки
-@app.get("/get_avatar/{user_id}")
-def get_avatar(user_id: int):
-    cursor.execute("SELECT avatar FROM users WHERE id = ?", (user_id,))
-    avatar = cursor.fetchone()
-    if avatar and avatar[0]:
-        return {"avatar": avatar[0]}
-    raise HTTPException(status_code=404, detail="Avatar not found")
-
-# Отправка сообщения (с шифрованием)
+# Отправка сообщения
 @app.post("/send_message")
 def send_message(msg: MessageSend):
     encrypted_message = cipher_suite.encrypt(msg.message.encode())
@@ -85,7 +61,7 @@ def send_message(msg: MessageSend):
     conn.commit()
     return {"message": "Message sent successfully"}
 
-# Получение сообщений (с расшифровкой)
+# Получение сообщений
 @app.get("/get_messages/{user_id}")
 def get_messages(user_id: int):
     cursor.execute("SELECT * FROM messages WHERE receiver_id = ?", (user_id,))
