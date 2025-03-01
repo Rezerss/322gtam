@@ -86,3 +86,5 @@ class TelegramApp(App):
 
 if __name__ == "__main__":
     TelegramApp().run()
+
+python telegram_ui.py
